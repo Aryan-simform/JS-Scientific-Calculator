@@ -1,14 +1,16 @@
 const utilities = (function () {
     function formatNumber(number) {
-        if (!Number.isFinite(number)) return "Error!";
+        console.log("fmt", number, "typeof: ",typeof number);
+        if (typeof number === Number) return "Error: Not a Number!";
         console.log(number);
         return (parseFloat(number));
     }
 
     function factorial(number) {
-        if (!Number.isInteger(number)|| parseFloat(number)<0) return "Error! Number must be integer";
+        console.log("fact: ",number)
+        if (parseFloat(number) < 0) return "Error! Number must be integer";
         let res = BigInt(1);
-        let i =BigInt(2);
+        let i = BigInt(2);
         for (; i <= BigInt(number); i++) res *= i;
         return res;
     }
@@ -36,7 +38,7 @@ function createHistory() {
         },
         clear() {
 
-            hist=[];
+            hist = [];
             localStorage.setItem("calculationHistory", []);
             // localStorage.removeItem("calculationHistory");
             SaveHistory();
@@ -46,161 +48,421 @@ function createHistory() {
 const history = new createHistory();
 function basicOperations() { }
 basicOperations.prototype.add = function (a, b) {
-  return a + b;
+    return a + b;
 };
 
 basicOperations.prototype.subtract = function (a, b) {
-  return a - b;
+    return a - b;
 };
 
 basicOperations.prototype.multiply = function (a, b) {
-  return a * b;
+    return a * b;
 };
 
 basicOperations.prototype.divide = function (a, b) {
-  if (b === 0) throw new Error("Division by zero");
-  return a / b;
+    if (b === 0) throw new Error("Division by zero");
+    return a / b;
 };
 
 basicOperations.prototype.mod = function (a, b) {
-  return a % b;
+    return a % b;
 };
 basicOperations.prototype.power = (a, b) => a ** b;
+
 basicOperations.prototype.mod = (a, b) => a % b;
 
 class Calculator extends basicOperations {
+
     constructor() {
         super();
-        this.current = "0";
-        this.previous = null;
-        this.operator = null;
         this.clearFlag = false;
+        this.current = "0";
+        this.expression = "";
     }
     //set the current number and reset the clearFlag
     inputNumber(number) {
         if (this.clearFlag) {
-            this.current = number;
+            this.expression = "";
             this.clearFlag = false;
-            return;
         }
-        if (number === "." && this.current.includes(".")) return;
-
-        this.current = this.current === "0" ? number : this.current + number;
+        this.expression += number;
+        this.current = this.expression || "0";
     }
 
     setOperator(op) {
-        if (this.operator) this.calculate();
-        this.previous = parseFloat(this.current);
-        this.operator = op;
-        this.clearFlag = true;
+        this.expression += op;
+        this.current = this.expression;
     }
-
     calculate() {
-        if (!this.operator || !this.previous) return;
-        const curr = parseFloat(this.current);
-        // const prev = parseFloat(this.previous);
-        console.log("curr",curr,"prev",this.previous);
-        const op = this.operator;
-        let result;
+
+        if (!this.expression) return;
+
         try {
-            switch (op) {
-                case "+":
-                    result = this.add(this.previous, curr);
-                    break;
+            const postfix = this.infixToPostfix(this.tokenizer(this.expression));
+            const result  = this.evaluatePostfix(postfix);
 
-                case "-":
-                    result = this.subtract(this.previous, curr);
-                    break;
+            history.add(`${this.expression}=${result}`);
 
-                case "*":
-                    result = this.multiply(this.previous, curr);
-                    break;
+            this.current = utilities.formatNumber(result);
+            this.expression = this.current.toString();
+            this.clearFlag = true;
 
-                case "/":
-                    result = this.divide(this.previous, curr);
-                    break;
-
-                case "%":
-                    result = this.mod(this.previous, curr);
-                    break;
-
-                case "^":
-                    result = this.power(this.previous, curr);
-                    break;
-            }
         } catch (err) {
-            this.current = "error";
-            this.operator = null;
-            this.previous = null;
-            return 0;
+            console.log(err);
+            this.current = "Error in calc";
+            this.expression = "";
         }
-        history.add(`${this.previous}${this.operator}${this.current}=${result}`);
-        console.log("result ", result)
-        this.current = utilities.formatNumber(result);
-        this.operator = null;
-        this.previous = null;
-        this.clearFlag = true;
     }
-
+    
     clear() {
+        this.expression = "";
         this.current = "0";
-        this.operator = null;
-        this.previous = null;
     }
-
+    
     delete() {
-
-        if (this.current) this.current = this.current.length > 1 ? this.current.slice(0, -1) : "0";
+        this.expression = this.expression.slice(0, -1);
+        this.current = this.expression || "0";
     }
 
     toggleSign() {
         this.current = (parseFloat(this.current) * -1).toString();
     }
-
+    
     reciprocal() {
         this.current = this.current !== "0" ? utilities.formatNumber(1 / this.current) : "0";
     }
     factorial() {
-        this.current = utilities.factorial(parseFloat(this.current));
+        this.expression += "!";
+        this.current = this.expression;
     }
 
     scientific(op) {
-        const curr = parseFloat(this.current);
-        console.log(curr)
-        let result;
-        try {
-            switch (op) {
-                case "sin": result = Math.sin(curr);
-                    break;
-                case "cos": result = Math.cos(curr);
-                    break;
-                case "tan": result = Math.tan(curr);
-                    break;
-                case "log": result = Math.log10(curr);
-                    break;
-                case "ln": result = Math.log(curr);
-                    break;
-                case "sqrt": result = Math.sqrt(curr);
-                    break;
-                case "pi": result = Math.PI;
-                    break;
-                case "e": result = Math.E;
-                    break;
-                // case "power": this.operator = "^";
-                //     break;
-
-            }
-        } catch {
-            result = NaN;
+        if (op === "pi" || op === "e") {
+            this.expression += op;
+        } else {
+            this.expression += `${op}(`;
         }
-        console.log(result);
-        ["pi","e"].includes(op) ?history.add(`${op}`) :
-        history.add(`${op} (${curr})`);
-        // if(isNaN(result))this.current="Error22!";
-        // else this.current=utilities.formatNumber(result);
-        this.current = (!Number.isFinite(result))
-        ? "Error!!!"
-        :utilities.formatNumber(result);
+        this.current = this.expression;
+    }
+    // calculate() {
+    //     if (!this.operator || !this.previous) return;
+    //     const curr = parseFloat(this.current);
+    //     // const prev = parseFloat(this.previous);
+    //     console.log("curr",curr,"prev",this.previous);
+    //     const op = this.operator;
+    //     let result;
+    //     try {
+    //         switch (op) {
+    //             case "+":
+    //                 result = this.add(this.previous, curr);
+    //                 break;
+
+    //             case "-":
+    //                 result = this.subtract(this.previous, curr);
+    //                 break;
+
+    //             case "*":
+    //                 result = this.multiply(this.previous, curr);
+    //                 break;
+
+    //             case "/":
+    //                 result = this.divide(this.previous, curr);
+    //                 break;
+
+    //             case "%":
+    //                 result = this.mod(this.previous, curr);
+    //                 break;
+
+    //             case "^":
+    //                 result = this.power(this.previous, curr);
+    //                 break;
+    //         }
+    //     } catch (err) {
+    //         this.current = "error";
+    //         this.operator = null;
+    //         this.previous = null;
+    //         return 0;
+    //     }
+    //     history.add(`${this.previous}${this.operator}${this.current}=${result}`);
+    //     console.log("result ", result)
+    //     this.current = utilities.formatNumber(result);
+    //     this.operator = null;
+    //     this.previous = null;
+    //     this.clearFlag = true;
+    // }
+    // scientific(op) {
+    //     const curr = parseFloat(this.current);
+    //     console.log(curr)
+    //     let result;
+    //     try {
+        //         switch (op) {
+    //             case "sin": result = Math.sin(curr);
+    //                 break;
+    //             case "cos": result = Math.cos(curr);
+    //                 break;
+    //             case "tan": result = Math.tan(curr);
+    //                 break;
+    //             case "log": result = Math.log10(curr);
+    //                 break;
+    //             case "ln": result = Math.log(curr);
+    //                 break;
+    //             case "sqrt": result = Math.sqrt(curr);
+    //                 break;
+    //             case "pi": result = Math.PI;
+    //                 break;
+    //             case "e": result = Math.E;
+    //                 break;
+    //             // case "power": this.operator = "^";
+    //             //     break;
+
+    //         }
+    //     } catch {
+    //         result = NaN;
+    //     }
+    //     console.log(result);
+    //     ["pi","e"].includes(op) ?history.add(`${op}`) :
+    //     history.add(`${op} (${curr})`);
+    //     // if(isNaN(result))this.current="Error22!";
+    //     // else this.current=utilities.formatNumber(result);
+    //     this.current = (!Number.isFinite(result))
+    //     ? "Error!!!"
+    //     :utilities.formatNumber(result);
+    // }
+
+    * tokenizer(exp) {
+        const isNumber = (c) => {
+            return ((c >= '0' && c <= '9') || c === ".");
+        }
+        const isAlphabat = (c) => {
+            return ((c >= "a" && c <= "z") || (c >= "A" && c <= "Z"));
+        }
+
+        // let tokens =[];
+        let i = 0;
+        while (i < exp.length) {
+            const char = exp[i];
+            //space senitiy check
+            if (char === " ") {
+                i++;
+                continue;
+            }
+
+            //number check 
+            // let isNumber=((char >= '0' && char<='9') || char ===".");
+            if (isNumber(exp[i])) {
+                let number = char;
+                i++;
+                while (i < exp.length && isNumber(exp[i])) {
+                    number += exp[i];
+                    i++;
+                }
+                yield number;
+                continue;
+            }
+            // let isAlphabat = ((char>="a" && char<="z")||(char>="A"&& char<="Z"));
+            if (isAlphabat(exp[i])) {
+                let word = exp[i];
+                i++;
+                while (i < exp.length && isAlphabat(exp[i])) {
+                    word += exp[i];
+                    i++;
+                }
+                yield word.toLowerCase();
+                continue;
+            }
+            yield char;
+            i++;
+
+        }
+    }
+
+    infixToPostfix(tokenStream) {
+
+        const output = [];
+        const stack = [];
+        let prev = null;
+
+        const functions = new Set(["sin", "cos", "tan", "ln", "log", "sqrt"]);
+
+        const precedence = {
+            "+": 1,
+            "-": 1,
+            "*": 2,
+            "/": 2,
+            "%": 2,
+            "^": 3,
+            "NEG": 4
+        };
+
+        const associativity = {
+            "+": "left",
+            "-": "left",
+            "*": "left",
+            "/": "left",
+            "%": "left",
+            "^": "right",
+            "NEG": "right"
+        };
+
+        for (const token of tokenStream) {
+
+            /* numbers + constants */
+            if (!isNaN(token) || token === "e" || token === "pi") {
+                output.push(token);
+                prev = token;
+                continue;
+            }
+
+            /* function */
+            if (functions.has(token)) {
+                stack.push(token);
+                prev = token;
+                continue;
+            }
+
+            /* left paren */
+            if (token === "(") {
+                stack.push(token);
+                prev = token;
+                continue;
+            }
+
+            /* right paren */
+            if (token === ")") {
+                while (stack.length && stack.at(-1) !== "(") {
+                    output.push(stack.pop());
+                }
+                stack.pop();
+
+                if (stack.length && functions.has(stack.at(-1))) {
+                    output.push(stack.pop());
+                }
+
+                prev = token;
+                continue;
+            }
+
+            /* factorial postfix */
+            if (token === "!") {
+                output.push(token);
+                prev = token;
+                continue;
+            }
+
+            /* unary minus */
+            if (token === "-") {
+                const isUnary =
+                    prev === null ||
+                    ["(", "+", "-", "*", "/", "%", "^"].includes(prev) ||
+                    functions.has(prev);
+
+                if (isUnary) {
+                    stack.push("NEG");
+                    prev = token;
+                    continue;
+                }
+            }
+
+            /* operator with associativity */
+            while (stack.length) {
+
+                const top = stack.at(-1);
+                if (!(top in precedence)) break;
+
+                const higher =
+                    precedence[top] > precedence[token];
+
+                const equalLeft =
+                    precedence[top] === precedence[token] &&
+                    associativity[token] === "left";
+
+                if (higher || equalLeft) {
+                    output.push(stack.pop());
+                } else break;
+            }
+
+            stack.push(token);
+            prev = token;
+        }
+
+        while (stack.length) output.push(stack.pop());
+
+        return output;
+    }
+
+    evaluatePostfix(postfix) {
+        const stack = [];
+        const unaryFuncs = {
+            sin: Math.sin,
+            cos: Math.cos,
+            tan: Math.tan,
+            ln: Math.log,
+            log: Math.log10,
+            sqrt: Math.sqrt,
+            NEG: (a) => -a
+        }
+
+        for (const token of postfix) {
+
+            if (!isNaN(token)) {
+                stack.push(parseFloat(token));
+                continue;
+            }
+            if (token === "pi" || token === "e") {
+                const constant = token.toUpperCase();
+                stack.push(Math[constant]);
+            }
+            if (token === "!"){
+                const a=stack.pop();
+                let r=utilities.factorial(a);
+                stack.push(r);
+                continue;
+            }; //handle later on
+            let result;
+            if (token in unaryFuncs) {
+
+                const a = stack.pop();
+                result = unaryFuncs[token](a);
+                stack.push(result);
+
+                continue;
+            }
+            const b = stack.pop();
+            const a = stack.pop();
+             try {
+            switch (token) {
+                case "+":
+                    result = this.add(a, b);
+                    break;
+
+                case "-":
+                    result = this.subtract(a, b);
+                    break;
+
+                case "*":
+                    result = this.multiply(a, b);
+                    break;
+
+                case "/":
+                    result = this.divide(a, b);
+                    break;
+
+                case "%":
+                    result = this.mod(a, b);
+                    break;
+
+                case "^":
+                    result = this.power(a, b);
+                    break;
+            }
+        } catch (err) {
+            this.current = "error in eval";
+            return 0;
+        }
+            stack.push(result);
+
+        }
+        return stack.pop()
     }
 }
 
@@ -248,6 +510,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const operator = btn.dataset.operator;
         const func = btn.dataset.function;
         const action = btn.dataset.action;
+        
 
         if (number) calc.inputNumber(number);
         else if (operator) calc.setOperator(operator);
@@ -282,8 +545,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
     /* Keyboard Support */
     document.addEventListener("keydown", function (e) {
+        console.log("Pressed:", e.key);
+
         if (!isNaN(e.key)) calc.inputNumber(e.key);
-        else if (["+", "-", "*", "/"].includes(e.key))
+        else if (["+", "-", "*", "/", "^","(", ")"].includes(e.key))
             calc.setOperator(e.key);
         else if (e.key === "Enter") calc.calculate();
         else if (e.key === "Backspace") calc.delete();
