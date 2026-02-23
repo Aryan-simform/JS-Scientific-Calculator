@@ -1,13 +1,13 @@
 const utilities = (function () {
     function formatNumber(number) {
-        console.log("fmt", number, "typeof: ",typeof number);
-        if (typeof number === Number) return "Error: Not a Number!";
+        console.log("fmt", number, "typeof: ", typeof number);
+        if (!Number.isFinite(number)) return "Error: Not a Number!";
         console.log(number);
         return (parseFloat(number));
     }
 
     function factorial(number) {
-        console.log("fact: ",number)
+        console.log("fact: ", number)
         if (parseFloat(number) < 0) return "Error! Number must be integer";
         let res = BigInt(1);
         let i = BigInt(2);
@@ -78,18 +78,31 @@ class Calculator extends basicOperations {
         this.clearFlag = false;
         this.current = "0";
         this.expression = "";
+        this.lastWasEval = false;
     }
     //set the current number and reset the clearFlag
-    inputNumber(number) {
-        if (this.clearFlag) {
-            this.expression = "";
-            this.clearFlag = false;
+    // inputNumber(number) {
+    //     if (this.clearFlag) {
+    //         this.expression = "";
+    //         this.clearFlag = false;
+    //     }
+    //     this.expression += number;
+    //     this.current = this.expression || "0";
+    // }
+
+    inputNumber(number){
+
+        if(this.lastWasEval){
+            this.expression="";
+            this.lastWasEval=false;
         }
-        this.expression += number;
-        this.current = this.expression || "0";
+
+        this.expression+=number;
+        this.current=this.expression || "0";
     }
 
     setOperator(op) {
+        this.lastWasEval=false;
         this.expression += op;
         this.current = this.expression;
     }
@@ -99,27 +112,28 @@ class Calculator extends basicOperations {
 
         try {
             const postfix = this.infixToPostfix(this.tokenizer(this.expression));
-            const result  = this.evaluatePostfix(postfix);
+            const result = this.evaluatePostfix(postfix);
 
             history.add(`${this.expression}=${result}`);
 
             this.current = utilities.formatNumber(result);
             this.expression = this.current.toString();
-            this.clearFlag = true;
-
+            // this.clearFlag = true;
+            this.lastWasEval = true;
         } catch (err) {
             console.log(err);
             this.current = "Error in calc";
             this.expression = "";
         }
     }
-    
+
     clear() {
         this.expression = "";
         this.current = "0";
     }
-    
+
     delete() {
+        this.lastWasEval=false;
         this.expression = this.expression.slice(0, -1);
         this.current = this.expression || "0";
     }
@@ -127,16 +141,19 @@ class Calculator extends basicOperations {
     toggleSign() {
         this.current = (parseFloat(this.current) * -1).toString();
     }
-    
+
     reciprocal() {
         this.current = this.current !== "0" ? utilities.formatNumber(1 / this.current) : "0";
     }
     factorial() {
+        this.lastWasEval=false;
+
         this.expression += "!";
         this.current = this.expression;
     }
 
     scientific(op) {
+        this.lastWasEval=false;
         if (op === "pi" || op === "e") {
             this.expression += op;
         } else {
@@ -195,7 +212,7 @@ class Calculator extends basicOperations {
     //     console.log(curr)
     //     let result;
     //     try {
-        //         switch (op) {
+    //         switch (op) {
     //             case "sin": result = Math.sin(curr);
     //                 break;
     //             case "cos": result = Math.cos(curr);
@@ -408,16 +425,23 @@ class Calculator extends basicOperations {
                 stack.push(parseFloat(token));
                 continue;
             }
-            if (token === "pi" || token === "e") {
-                const constant = token.toUpperCase();
-                stack.push(Math[constant]);
-            }
-            if (token === "!"){
-                const a=stack.pop();
-                let r=utilities.factorial(a);
-                stack.push(r);
+            if (token === "pi") {
+                // console.log(token, Math.PI);
+                stack.push(parseFloat(Math.PI));
                 continue;
-            }; //handle later on
+            }
+            if (token === "e") {
+
+                // console.log(token, Math.PI);
+                stack.push(parseFloat(Math.E));
+                continue;
+            }
+            if (token === "!") {
+                const a = stack.pop();
+                let r = utilities.factorial(a);
+                stack.push(Number(r));
+                continue;
+            };
             let result;
             if (token in unaryFuncs) {
 
@@ -429,36 +453,36 @@ class Calculator extends basicOperations {
             }
             const b = stack.pop();
             const a = stack.pop();
-             try {
-            switch (token) {
-                case "+":
-                    result = this.add(a, b);
-                    break;
+            try {
+                switch (token) {
+                    case "+":
+                        result = this.add(a, b);
+                        break;
 
-                case "-":
-                    result = this.subtract(a, b);
-                    break;
+                    case "-":
+                        result = this.subtract(a, b);
+                        break;
 
-                case "*":
-                    result = this.multiply(a, b);
-                    break;
+                    case "*":
+                        result = this.multiply(a, b);
+                        break;
 
-                case "/":
-                    result = this.divide(a, b);
-                    break;
+                    case "/":
+                        result = this.divide(a, b);
+                        break;
 
-                case "%":
-                    result = this.mod(a, b);
-                    break;
+                    case "%":
+                        result = this.mod(a, b);
+                        break;
 
-                case "^":
-                    result = this.power(a, b);
-                    break;
+                    case "^":
+                        result = this.power(a, b);
+                        break;
+                }
+            } catch (err) {
+                this.current = "error in eval";
+                return 0;
             }
-        } catch (err) {
-            this.current = "error in eval";
-            return 0;
-        }
             stack.push(result);
 
         }
@@ -510,7 +534,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const operator = btn.dataset.operator;
         const func = btn.dataset.function;
         const action = btn.dataset.action;
-        
+
 
         if (number) calc.inputNumber(number);
         else if (operator) calc.setOperator(operator);
@@ -548,7 +572,7 @@ document.addEventListener("DOMContentLoaded", function () {
         console.log("Pressed:", e.key);
 
         if (!isNaN(e.key)) calc.inputNumber(e.key);
-        else if (["+", "-", "*", "/", "^","(", ")"].includes(e.key))
+        else if (["+", "-", "*", "/", "^", "(", ")"].includes(e.key))
             calc.setOperator(e.key);
         else if (e.key === "Enter") calc.calculate();
         else if (e.key === "Backspace") calc.delete();
