@@ -1,13 +1,13 @@
 const utilities = (function () {
     function formatNumber(number) {
-        console.log("fmt", number, "typeof: ", typeof number);
-        if (!Number.isFinite(number)) return "Error: Not a Number!";
-        console.log(number);
-        return (parseFloat(number));
+        if (typeof number === "bigint") return number.toString();
+        const numeric = typeof number === "number" ? number : Number(number);
+        if (!Number.isFinite(numeric)) return "Error: Not a Number!";
+        return parseFloat(numeric);
     }
 
     function factorial(number) {
-        console.log("fact: ", number)
+        console.log("fact: ",number)
         if (parseFloat(number) < 0) return "Error! Number must be integer";
         let res = BigInt(1);
         let i = BigInt(2);
@@ -78,32 +78,48 @@ class Calculator extends basicOperations {
         this.clearFlag = false;
         this.current = "0";
         this.expression = "";
-        this.lastWasEval = false;
     }
     //set the current number and reset the clearFlag
-    // inputNumber(number) {
-    //     if (this.clearFlag) {
-    //         this.expression = "";
-    //         this.clearFlag = false;
-    //     }
-    //     this.expression += number;
-    //     this.current = this.expression || "0";
-    // }
-
-    inputNumber(number){
-
-        if(this.lastWasEval){
-            this.expression="";
-            this.lastWasEval=false;
+    inputNumber(number) {
+        if (this.clearFlag) {
+            this.expression = "";
+            this.clearFlag = false;
         }
-
-        this.expression+=number;
-        this.current=this.expression || "0";
+        this.expression += number;
+        this.current = this.expression || "0";
     }
 
     setOperator(op) {
-        this.lastWasEval=false;
-        this.expression += op;
+        if (this.clearFlag) {
+            this.expression = this.current === "0" ? "" : this.current;
+            this.clearFlag = false;
+        }
+
+        if (!this.expression) {
+            if (op === "-" || op === "(") {
+                this.expression = op;
+                this.current = this.expression;
+            }
+            return;
+        }
+
+        const operators = new Set(["+", "-", "*", "/", "%", "^"]);
+        const last = this.expression.at(-1);
+
+        if (last === "(") {
+            if (op === "-" || op === "(") {
+                this.expression += op;
+            }
+            this.current = this.expression;
+            return;
+        }
+
+        if (operators.has(last)) {
+            this.expression = this.expression.slice(0, -1) + op;
+        } else {
+            this.expression += op;
+        }
+
         this.current = this.expression;
     }
     calculate() {
@@ -112,48 +128,98 @@ class Calculator extends basicOperations {
 
         try {
             const postfix = this.infixToPostfix(this.tokenizer(this.expression));
-            const result = this.evaluatePostfix(postfix);
+            const result  = this.evaluatePostfix(postfix);
 
             history.add(`${this.expression}=${result}`);
 
             this.current = utilities.formatNumber(result);
             this.expression = this.current.toString();
-            // this.clearFlag = true;
-            this.lastWasEval = true;
+            this.clearFlag = true;
+
         } catch (err) {
             console.log(err);
             this.current = "Error in calc";
             this.expression = "";
         }
     }
-
+    
     clear() {
         this.expression = "";
         this.current = "0";
     }
-
+    
     delete() {
-        this.lastWasEval=false;
         this.expression = this.expression.slice(0, -1);
         this.current = this.expression || "0";
     }
 
-    toggleSign() {
-        this.current = (parseFloat(this.current) * -1).toString();
+    replaceLastAtom(replacer) {
+        if (!this.expression) return;
+
+        let end = this.expression.length - 1;
+        while (end >= 0 && this.expression[end] === " ") end--;
+        if (end < 0) return;
+
+        let start = end;
+        const isDigitOrDot = (c) => (c >= "0" && c <= "9") || c === ".";
+        const isAlpha = (c) =>
+            (c >= "a" && c <= "z") || (c >= "A" && c <= "Z");
+
+        if (this.expression[end] === ")") {
+            let depth = 0;
+            for (let i = end; i >= 0; i--) {
+                if (this.expression[i] === ")") depth++;
+                else if (this.expression[i] === "(") depth--;
+                if (depth === 0) {
+                    start = i;
+                    break;
+                }
+            }
+        } else if (isAlpha(this.expression[end])) {
+            for (let i = end; i >= 0; i--) {
+                if (!isAlpha(this.expression[i])) {
+                    start = i + 1;
+                    break;
+                }
+                start = i;
+            }
+        } else {
+            for (let i = end; i >= 0; i--) {
+                if (!isDigitOrDot(this.expression[i])) {
+                    start = i + 1;
+                    break;
+                }
+                start = i;
+            }
+        }
+
+        const atom = this.expression.slice(start, end + 1);
+        const replaced = replacer(atom);
+        this.expression =
+            this.expression.slice(0, start) + replaced + this.expression.slice(end + 1);
+        this.current = this.expression || "0";
     }
 
+    toggleSign() {
+        this.replaceLastAtom((atom) => {
+            if (!atom) return atom;
+            if (atom.startsWith("-")) return atom.slice(1);
+            return `-${atom}`;
+        });
+    }
+    
     reciprocal() {
-        this.current = this.current !== "0" ? utilities.formatNumber(1 / this.current) : "0";
+        this.replaceLastAtom((atom) => {
+            if (!atom || atom === "0") return atom;
+            return `(1/(${atom}))`;
+        });
     }
     factorial() {
-        this.lastWasEval=false;
-
         this.expression += "!";
         this.current = this.expression;
     }
 
     scientific(op) {
-        this.lastWasEval=false;
         if (op === "pi" || op === "e") {
             this.expression += op;
         } else {
@@ -212,7 +278,7 @@ class Calculator extends basicOperations {
     //     console.log(curr)
     //     let result;
     //     try {
-    //         switch (op) {
+        //         switch (op) {
     //             case "sin": result = Math.sin(curr);
     //                 break;
     //             case "cos": result = Math.cos(curr);
@@ -425,23 +491,17 @@ class Calculator extends basicOperations {
                 stack.push(parseFloat(token));
                 continue;
             }
-            if (token === "pi") {
-                // console.log(token, Math.PI);
-                stack.push(parseFloat(Math.PI));
+            if (token === "pi" || token === "e") {
+                const constant = token.toUpperCase();
+                stack.push(Math[constant]);
                 continue;
             }
-            if (token === "e") {
-
-                // console.log(token, Math.PI);
-                stack.push(parseFloat(Math.E));
+            if (token === "!"){
+                const a=stack.pop();
+                let r=utilities.factorial(a);
+                stack.push(r);
                 continue;
-            }
-            if (token === "!") {
-                const a = stack.pop();
-                let r = utilities.factorial(a);
-                stack.push(Number(r));
-                continue;
-            };
+            }; //handle later on
             let result;
             if (token in unaryFuncs) {
 
@@ -453,36 +513,36 @@ class Calculator extends basicOperations {
             }
             const b = stack.pop();
             const a = stack.pop();
-            try {
-                switch (token) {
-                    case "+":
-                        result = this.add(a, b);
-                        break;
+             try {
+            switch (token) {
+                case "+":
+                    result = this.add(a, b);
+                    break;
 
-                    case "-":
-                        result = this.subtract(a, b);
-                        break;
+                case "-":
+                    result = this.subtract(a, b);
+                    break;
 
-                    case "*":
-                        result = this.multiply(a, b);
-                        break;
+                case "*":
+                    result = this.multiply(a, b);
+                    break;
 
-                    case "/":
-                        result = this.divide(a, b);
-                        break;
+                case "/":
+                    result = this.divide(a, b);
+                    break;
 
-                    case "%":
-                        result = this.mod(a, b);
-                        break;
+                case "%":
+                    result = this.mod(a, b);
+                    break;
 
-                    case "^":
-                        result = this.power(a, b);
-                        break;
-                }
-            } catch (err) {
-                this.current = "error in eval";
-                return 0;
+                case "^":
+                    result = this.power(a, b);
+                    break;
             }
+        } catch (err) {
+            this.current = "error in eval";
+            return 0;
+        }
             stack.push(result);
 
         }
@@ -534,7 +594,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const operator = btn.dataset.operator;
         const func = btn.dataset.function;
         const action = btn.dataset.action;
-
+        
 
         if (number) calc.inputNumber(number);
         else if (operator) calc.setOperator(operator);
@@ -572,7 +632,7 @@ document.addEventListener("DOMContentLoaded", function () {
         console.log("Pressed:", e.key);
 
         if (!isNaN(e.key)) calc.inputNumber(e.key);
-        else if (["+", "-", "*", "/", "^", "(", ")"].includes(e.key))
+        else if (["+", "-", "*", "/", "^","(", ")"].includes(e.key))
             calc.setOperator(e.key);
         else if (e.key === "Enter") calc.calculate();
         else if (e.key === "Backspace") calc.delete();
