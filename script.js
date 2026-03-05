@@ -1,9 +1,9 @@
 const utilities = (function () {
     function formatNumber(number) {
-        console.log("fmt", number, "typeof: ",typeof number);
-        if (typeof number === Number) return "Error: Not a Number!";
-        console.log(number);
-        return (parseFloat(number));
+        if (typeof number === "bigint") return number.toString();
+        const numeric = typeof number === "number" ? number : Number(number);
+        if (!Number.isFinite(numeric)) return "Error: Not a Number!";
+        return parseFloat(numeric);
     }
 
     function factorial(number) {
@@ -90,7 +90,36 @@ class Calculator extends basicOperations {
     }
 
     setOperator(op) {
-        this.expression += op;
+        if (this.clearFlag) {
+            this.expression = this.current === "0" ? "" : this.current;
+            this.clearFlag = false;
+        }
+
+        if (!this.expression) {
+            if (op === "-" || op === "(") {
+                this.expression = op;
+                this.current = this.expression;
+            }
+            return;
+        }
+
+        const operators = new Set(["+", "-", "*", "/", "%", "^"]);
+        const last = this.expression.at(-1);
+
+        if (last === "(") {
+            if (op === "-" || op === "(") {
+                this.expression += op;
+            }
+            this.current = this.expression;
+            return;
+        }
+
+        if (operators.has(last)) {
+            this.expression = this.expression.slice(0, -1) + op;
+        } else {
+            this.expression += op;
+        }
+
         this.current = this.expression;
     }
     calculate() {
@@ -124,12 +153,66 @@ class Calculator extends basicOperations {
         this.current = this.expression || "0";
     }
 
+    replaceLastAtom(replacer) {
+        if (!this.expression) return;
+
+        let end = this.expression.length - 1;
+        while (end >= 0 && this.expression[end] === " ") end--;
+        if (end < 0) return;
+
+        let start = end;
+        const isDigitOrDot = (c) => (c >= "0" && c <= "9") || c === ".";
+        const isAlpha = (c) =>
+            (c >= "a" && c <= "z") || (c >= "A" && c <= "Z");
+
+        if (this.expression[end] === ")") {
+            let depth = 0;
+            for (let i = end; i >= 0; i--) {
+                if (this.expression[i] === ")") depth++;
+                else if (this.expression[i] === "(") depth--;
+                if (depth === 0) {
+                    start = i;
+                    break;
+                }
+            }
+        } else if (isAlpha(this.expression[end])) {
+            for (let i = end; i >= 0; i--) {
+                if (!isAlpha(this.expression[i])) {
+                    start = i + 1;
+                    break;
+                }
+                start = i;
+            }
+        } else {
+            for (let i = end; i >= 0; i--) {
+                if (!isDigitOrDot(this.expression[i])) {
+                    start = i + 1;
+                    break;
+                }
+                start = i;
+            }
+        }
+
+        const atom = this.expression.slice(start, end + 1);
+        const replaced = replacer(atom);
+        this.expression =
+            this.expression.slice(0, start) + replaced + this.expression.slice(end + 1);
+        this.current = this.expression || "0";
+    }
+
     toggleSign() {
-        this.current = (parseFloat(this.current) * -1).toString();
+        this.replaceLastAtom((atom) => {
+            if (!atom) return atom;
+            if (atom.startsWith("-")) return atom.slice(1);
+            return `-${atom}`;
+        });
     }
     
     reciprocal() {
-        this.current = this.current !== "0" ? utilities.formatNumber(1 / this.current) : "0";
+        this.replaceLastAtom((atom) => {
+            if (!atom || atom === "0") return atom;
+            return `(1/(${atom}))`;
+        });
     }
     factorial() {
         this.expression += "!";
@@ -411,6 +494,7 @@ class Calculator extends basicOperations {
             if (token === "pi" || token === "e") {
                 const constant = token.toUpperCase();
                 stack.push(Math[constant]);
+                continue;
             }
             if (token === "!"){
                 const a=stack.pop();
